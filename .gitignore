@@ -1,0 +1,9 @@
+# vscode
+devcontainer-lock.json
+
+# rust
+target
+Cargo.lock
+
+# app data
+.garmin_tokens.json

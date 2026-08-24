@@ -1,0 +1,19 @@
+{
+    "image": "mcr.microsoft.com/devcontainers/rust:latest",
+    "features": {
+        "ghcr.io/devcontainers-extra/features/cmake": {},
+        "ghcr.io/devcontainers-extra/features/apt-packages": {
+            "packages": "libclang-dev"
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "anthropic.claude-code"
+            ]
+        }
+    },
+    "mounts": [
+        "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind"
+    ]
+}
