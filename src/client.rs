@@ -79,6 +79,9 @@ const PORTAL_IMPERSONATIONS: &[Profile] = &[
     Emulation::Edge131,
 ];
 
+const ACCEPT_JSON: &str = "application/json";
+const ACCEPT_ANY: &str = "*/*";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MfaFlow {
     Ios,
@@ -854,7 +857,7 @@ impl GarminClient {
     //  GENERIC API SURFACE                                               //
     // ------------------------------------------------------------------ //
 
-    fn api_headers(&self) -> Result<HeaderMap> {
+    fn api_headers(&self, accept: &'static str) -> Result<HeaderMap> {
         if !self.is_authenticated() {
             return Err(GarminError::Authentication("Not authenticated".into()));
         }
@@ -862,12 +865,12 @@ impl GarminClient {
             let mut h = native_headers(&[("authorization", format!("Bearer {token}"))]);
             h.insert(
                 HeaderName::from_static("accept"),
-                HeaderValue::from_static("application/json"),
+                HeaderValue::from_static(accept),
             );
             return Ok(h);
         }
         let mut h = HeaderMap::new();
-        h.insert(HeaderName::from_static("accept"), HeaderValue::from_static("application/json"));
+        h.insert(HeaderName::from_static("accept"), HeaderValue::from_static(accept));
         h.insert(HeaderName::from_static("nk"), HeaderValue::from_static("NT"));
         h.insert(
             HeaderName::from_static("origin"),
@@ -893,13 +896,14 @@ impl GarminClient {
         method: Method,
         path: &str,
         json_body: Option<&Value>,
+        accept: &'static str,
     ) -> Result<wreq::Response> {
         if self.is_authenticated() && self.token_expires_soon() {
             let _ = self.refresh_session().await;
         }
 
         let url = format!("{}/{}", self.connectapi, path.trim_start_matches('/'));
-        let headers = self.api_headers()?;
+        let headers = self.api_headers(accept)?;
 
         let send = |c: &Client, h: HeaderMap| {
             let mut req = c.request(method.clone(), &url).headers(h);
@@ -913,7 +917,7 @@ impl GarminClient {
 
         if resp.status() == StatusCode::UNAUTHORIZED {
             let _ = self.refresh_session().await;
-            let headers = self.api_headers()?;
+            let headers = self.api_headers(accept)?;
             resp = send(&self.api_client, headers).await?;
         }
 
@@ -940,7 +944,7 @@ impl GarminClient {
     }
 
     pub async fn connectapi(&mut self, path: &str, body: Option<&Value>) -> Result<Value> {
-        let resp = self.run_request(Method::GET, path, body).await?;
+        let resp = self.run_request(Method::GET, path, body, ACCEPT_JSON).await?;
         Ok(resp.json().await?)
     }
 
@@ -949,22 +953,24 @@ impl GarminClient {
     }
 
     pub async fn post(&mut self, path: &str, body: &Value) -> Result<Value> {
-        let resp = self.run_request(Method::POST, path, Some(body)).await?;
+        let resp = self.run_request(Method::POST, path, Some(body), ACCEPT_JSON).await?;
         Ok(resp.json().await.unwrap_or(Value::Null))
     }
 
     pub async fn put(&mut self, path: &str, body: &Value) -> Result<Value> {
-        let resp = self.run_request(Method::PUT, path, Some(body)).await?;
+        let resp = self.run_request(Method::PUT, path, Some(body), ACCEPT_JSON).await?;
         Ok(resp.json().await.unwrap_or(Value::Null))
     }
 
     pub async fn delete(&mut self, path: &str) -> Result<Value> {
-        let resp = self.run_request(Method::DELETE, path, None).await?;
+        let resp = self.run_request(Method::DELETE, path, None, ACCEPT_JSON).await?;
         Ok(resp.json().await.unwrap_or(Value::Null))
     }
 
+    /// Fetches a binary resource (FIT/ZIP/GPX exports). These endpoints answer
+    /// 406 Not Acceptable when asked for JSON, so any content type is accepted.
     pub async fn download(&mut self, path: &str) -> Result<Vec<u8>> {
-        let resp = self.run_request(Method::GET, path, None).await?;
+        let resp = self.run_request(Method::GET, path, None, ACCEPT_ANY).await?;
         Ok(resp.bytes().await?.to_vec())
     }
 }
